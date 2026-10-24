@@ -1,0 +1,137 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Payment Gateway Demo</title>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 80px auto;
+      padding: 24px;
+      text-align: center;
+    }
+
+    button {
+      padding: 12px 24px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+
+    #result {
+      margin-top: 24px;
+      text-align: left;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Payment Gateway Demo</h1>
+  <p>Demo product: ₹9999</p>
+
+  <button id="payButton">Pay ₹9999</button>
+
+  <div id="result"></div>
+
+  <script>
+    const payButton = document.getElementById("payButton");
+    const result = document.getElementById("result");
+
+    payButton.addEventListener("click", async () => {
+      payButton.disabled = true;
+      result.textContent = "Creating order...";
+
+      try {
+        // 1. Get the public Razorpay Key ID
+        const configResponse = await fetch("/api/config");
+        if (!configResponse.ok) {
+          throw new Error("Could not load payment configuration");
+        }
+
+        const config = await configResponse.json();
+        console.log(config)
+
+        // 2. Ask our backend to create and save an order
+        const orderResponse = await fetch("/api/payments/orders", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ amount: 999900 }),
+        });
+
+        if (!orderResponse.ok) {
+          throw new Error("Could not create payment order");
+        }
+
+        const orderData = await orderResponse.json();
+        const order = orderData.razorpayOrder;
+
+        // 3. Open Razorpay Checkout
+        const options = {
+          key: config.keyId,
+          amount: order.amount,
+          currency: order.currency,
+          name: "Payment Gateway Demo",
+          description: "Test purchase",
+          order_id: order.id,
+
+          handler: function (response) {
+            // Display the real Checkout response.
+            // We will connect this to secure server-side
+            // verification in the next step.
+            result.innerHTML = "";
+
+            const heading = document.createElement("h3");
+            heading.textContent = "Checkout returned payment details";
+            result.appendChild(heading);
+
+            const details = document.createElement("pre");
+            details.textContent = JSON.stringify(response, null, 2);
+            result.appendChild(details);
+          },
+
+          modal: {
+            ondismiss: function () {
+              result.textContent =
+                "Checkout closed. The order may still be unpaid.";
+              payButton.disabled = false;
+            },
+          },
+
+          theme: {
+            color: "#2563eb",
+          },
+        };
+
+        const checkout = new Razorpay(options);
+
+        checkout.on("payment.failed", function (response) {
+          result.textContent =
+            "Payment failed: " +
+            response.error.description;
+
+          payButton.disabled = false;
+        });
+
+        checkout.open();
+        result.textContent = "Checkout opened.";
+
+      } catch (error) {
+        result.textContent = error.message;
+        payButton.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
